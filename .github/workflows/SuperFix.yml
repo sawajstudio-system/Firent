@@ -1,0 +1,165 @@
+name: SuperFix
+
+on:
+  workflow_dispatch:
+
+jobs:
+  superfix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      TG_TOKEN: ${{ secrets.TELEGRAM_API_REPORT_TOKEN }}
+      TG_CHAT: ${{ secrets.TELEGRAM_API_REPORT_CHAT_ID }}
+      TOKEN_GITHUB: ${{ secrets.TOKEN_GITHUB }}
+
+    steps:
+      - name: 1. Checkout Public Repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: 2. Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 3. Install deps
+        run: pip install requests
+
+      - name: 4. Start Notification
+        run: |
+          python -c "
+          import os, requests
+          tok, chat = os.getenv('TG_TOKEN'), os.getenv('TG_CHAT')
+          if tok and chat:
+              try:
+                  requests.post(f'https://api.telegram.org/bot{tok}/sendMessage',
+                      json={'chat_id': chat, 'text': '🚀 SuperFix started...'}, timeout=10)
+              except Exception as e:
+                  print(f'Telegram skipped: {e}')
+          "
+
+      # ==========================================
+      # CLONE PRIVATE
+      # ==========================================
+      - name: 5. Clone Private Backend
+        run: |
+          set -e
+          if [ -z "$TOKEN_GITHUB" ]; then
+            echo "❌ TOKEN_GITHUB EMPTY!"
+            exit 1
+          fi
+          git clone https://$TOKEN_GITHUB@github.com/sawajstudio-system/Backend.git "$GITHUB_WORKSPACE/priv"
+          cd "$GITHUB_WORKSPACE/priv"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "✅ Clone OK"
+          ls -la
+
+      # ==========================================
+      # MOVE FILES
+      # ==========================================
+      - name: 6. Move Files into System_room
+        run: |
+          cd "$GITHUB_WORKSPACE/priv"
+
+          if [ -f "create.py" ] && [ ! -f "System_room/create.py" ]; then
+            git mv create.py System_room/create.py
+            echo "✅ Moved create.py"
+          else
+            echo "⏭️ create.py skipped"
+          fi
+
+          if [ -f "README.md" ] && [ ! -f "System_room/README.md" ]; then
+            git mv README.md System_room/README.md
+            echo "✅ Moved README.md"
+          else
+            echo "⏭️ README.md skipped"
+          fi
+
+          if [ -d "service_api" ] && [ ! -d "System_room/service_api" ]; then
+            git mv service_api System_room/service_api
+            echo "✅ Moved service_api/"
+          else
+            echo "⏭️ service_api skipped"
+          fi
+
+          echo ""
+          echo "Files after move:"
+          ls -la
+
+      # ==========================================
+      # REWRITE PY FILES IN PRIVATE
+      # ==========================================
+      - name: 7. Rewrite Private PY Files
+        run: |
+          cd "$GITHUB_WORKSPACE/priv"
+          python "$GITHUB_WORKSPACE/superfix.py"
+
+      # ==========================================
+      # COMMIT & PUSH PRIVATE
+      # ==========================================
+      - name: 8. Commit & Push Private
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/priv"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "⚠️ No changes in private repo"
+          else
+            git commit -m "SuperFix: files moved to System_room/, PY paths fixed"
+            git push origin HEAD
+            echo "✅ Private repo pushed"
+          fi
+
+      # ==========================================
+      # UPDATE PUBLIC System.yml
+      # ==========================================
+      - name: 9. Update Public System.yml
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          python "$GITHUB_WORKSPACE/superfix_public.py"
+
+      # ==========================================
+      # COMMIT & PUSH PUBLIC
+      # ==========================================
+      - name: 10. Commit & Push Public
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "⚠️ No changes in public repo"
+          else
+            git commit -m "SuperFix: System.yml PYTHONPATH updated"
+            git push origin HEAD
+            echo "✅ Public repo pushed"
+          fi
+
+      # ==========================================
+      # CLEANUP + NOTIFY
+      # ==========================================
+      - name: 11. Cleanup
+        if: always()
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/priv" || true
+
+      - name: 12. Final Notification
+        if: always()
+        run: |
+          python -c "
+          import os, requests
+          tok, chat = os.getenv('TG_TOKEN'), os.getenv('TG_CHAT')
+          status = '${{ job.status }}'
+          if tok and chat:
+              try:
+                  requests.post(f'https://api.telegram.org/bot{tok}/sendMessage',
+                      json={'chat_id': chat, 'text': f'🎉 SuperFix done!\nStatus: {status}\n\nAb system⚙️ → ALL chalao.'}, timeout=10)
+              except Exception as e:
+                  print(f'Telegram skipped: {e}')
+          "
