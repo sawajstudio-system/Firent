@@ -132,7 +132,7 @@ jobs:
           with open(out, "w", encoding="utf-8") as fo:
               fo.write(f"\n\n{'#'*60}\n# PUBLIC REPO CODE\n{'#'*60}\n")
               for p in walk("."):
-                  if not p.endswith(exts) or p == out: continue
+                  if not p.endswith(exts) or p == out or "temp_private" in p: continue
                   fo.write(f"\n\n{'='*50}\nFILE: Public/{p}\n{'='*50}\n")
                   try:
                       with open(p, "r", encoding="utf-8", errors="ignore") as fi: fo.write(fi.read())
@@ -174,7 +174,7 @@ jobs:
           out = "Output.zip"
           with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
               for p in walk("."):
-                  if p != out and not p.startswith(".") and not p.startswith("Output.zip"):
+                  if p != out and not p.startswith(".") and not p.startswith("Output.zip") and "temp_private" not in p:
                       z.write(p, os.path.relpath(p, "."))
               for p in walk(PRIV):
                   z.write(p, os.path.join("Private_Repo", os.path.relpath(p, PRIV)))
@@ -187,16 +187,18 @@ jobs:
           PYEOF
 
       # ==========================================
-      # URL TESTING (continue-on-error)
+      # URL TESTING (FIXED PATH + PYTHONPATH)
       # ==========================================
       - name: 8. 🌐 Run URL Testing
         if: github.event.inputs.task == 'URL Testing' || github.event.inputs.task == 'ALL'
         continue-on-error: true
+        env:
+          PYTHONPATH: ${{ runner.temp }}/private_repo/System_room
         run: |
           python ${{ runner.temp }}/private_repo/System_room/run_url_checker.py
 
       # ==========================================
-      # API TESTING (continue-on-error)
+      # API TESTING (FIXED PATH + PYTHONPATH)
       # ==========================================
       - name: 9. 🧪 Run API Testing
         if: github.event.inputs.task == 'API Testing' || github.event.inputs.task == 'ALL'
