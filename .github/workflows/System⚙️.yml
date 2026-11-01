@@ -202,7 +202,7 @@ jobs:
         if: github.event.inputs.task == 'API Testing' || github.event.inputs.task == 'ALL'
         continue-on-error: true
         env:
-          PYTHONPATH: ${{ runner.temp }}/private_repo
+          PYTHONPATH: ${{ runner.temp }}/private_repo/System_room
         run: |
           cd ${{ runner.temp }}/private_repo/System_room/A_API_room && python 06_run_all_tests.py
 
