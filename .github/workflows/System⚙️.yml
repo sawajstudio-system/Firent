@@ -1,0 +1,217 @@
+name: system⚙️
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Kya karna hai?'
+        required: true
+        type: choice
+        options:
+          - 'ALL'
+          - 'TXT'
+          - 'ZIP'
+          - 'URL Testing'
+          - 'API Testing'
+          - 'Cleaner (Purge History)'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+
+    env:
+      TELEGRAM_API_REPORT_TOKEN: ${{ secrets.TELEGRAM_API_REPORT_TOKEN }}
+      TELEGRAM_API_REPORT_CHAT_ID: ${{ secrets.TELEGRAM_API_REPORT_CHAT_ID }}
+      TOKEN_GITHUB: ${{ secrets.TOKEN_GITHUB }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+      ANGES_API_KEY: ${{ secrets.ANGES_API_KEY }}
+      PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+      PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+      COVERR_API_KEY: ${{ secrets.COVERR_API_KEY }}
+      MAGICHOUR_API_KEY: ${{ secrets.MAGICHOUR_API_KEY }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      TANVO_API_KEY: ${{ secrets.TANVO_API_KEY }}
+
+    steps:
+      - name: 1. 📥 Checkout Public Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ==========================================
+      # CLEANER
+      # ==========================================
+      - name: 2. 🧹 Purge History & Clean Junk
+        if: github.event.inputs.task == 'Cleaner (Purge History)'
+        run: |
+          set -x
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          rm -rf tmp/ temp/ .temp/ *.log
+          rm -rf temp_private service_api System_room Combined.txt Output.zip
+
+          git checkout --orphan temp_branch
+          git add -A
+          git commit -m "Fresh start: Cleaned history and temp files"
+
+          git remote set-url origin https://x-access-token:${{ secrets.TOKEN_GITHUB }}@github.com/${{ github.repository }}.git
+          git push -f origin temp_branch:main
+
+          REPO="${{ github.repository }}"
+          TOKEN="${{ secrets.TOKEN_GITHUB }}"
+          CURRENT_RUN_ID="${{ github.run_id }}"
+
+          RUNS=$(curl -s -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/runs?per_page=100" \
+            | jq -r '.workflow_runs[].id')
+
+          for run_id in $RUNS; do
+            if [ "$run_id" != "$CURRENT_RUN_ID" ]; then
+              curl -X DELETE -s -H "Authorization: token $TOKEN" \
+                "https://api.github.com/repos/$REPO/actions/runs/$run_id"
+            fi
+          done
+
+          echo "✅ Cleaner successful! Repo is 100% clean."
+
+      # ==========================================
+      # CLONE PRIVATE
+      # ==========================================
+      - name: 3. 🔒 Clone Private Backend in Air
+        if: github.event.inputs.task != 'Cleaner (Purge History)'
+        run: |
+          git clone https://${{ secrets.TOKEN_GITHUB }}@github.com/sawajstudio-system/Backend.git ${{ runner.temp }}/private_repo
+
+      - name: 4. 🐍 Setup Python
+        if: github.event.inputs.task != 'Cleaner (Purge History)'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 5. 📦 Install Deps
+        if: github.event.inputs.task != 'Cleaner (Purge History)'
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      # ==========================================
+      # TXT GENERATOR
+      # ==========================================
+      - name: 6. 📄 Generate TXT
+        if: github.event.inputs.task == 'TXT' || github.event.inputs.task == 'ALL'
+        shell: bash
+        run: |
+          python << 'PYEOF'
+          import os, requests
+          TOKEN = os.getenv("TELEGRAM_API_REPORT_TOKEN")
+          CHAT_ID = os.getenv("TELEGRAM_API_REPORT_CHAT_ID")
+          PRIV = os.getenv("RUNNER_TEMP") + "/private_repo"
+
+          def walk(base, is_private=False):
+              EXCLUDE = {".git", "__pycache__", "venv", "node_modules"}
+              for root, dirs, files in os.walk(base):
+                  if is_private: dirs[:] = [d for d in dirs if d not in EXCLUDE and d != ".github"]
+                  else: dirs[:] = [d for d in dirs if d not in EXCLUDE]
+                  for f in files: yield os.path.join(root, f)
+
+          out = "Combined.txt"
+          exts = (".py", ".txt", ".yml", ".yaml", ".md", ".json")
+
+          with open(out, "w", encoding="utf-8") as fo:
+              fo.write(f"\n\n{'#'*60}\n# PUBLIC REPO CODE\n{'#'*60}\n")
+              for p in walk("."):
+                  if not p.endswith(exts) or p == out: continue
+                  fo.write(f"\n\n{'='*50}\nFILE: Public/{p}\n{'='*50}\n")
+                  try:
+                      with open(p, "r", encoding="utf-8", errors="ignore") as fi: fo.write(fi.read())
+                  except: pass
+              fo.write(f"\n\n{'#'*60}\n# PRIVATE REPO CODE\n{'#'*60}\n")
+              for p in walk(PRIV, is_private=True):
+                  if not p.endswith(exts): continue
+                  fo.write(f"\n\n{'='*50}\nFILE: Private/{os.path.relpath(p, PRIV)}\n{'='*50}\n")
+                  try:
+                      with open(p, "r", encoding="utf-8", errors="ignore") as fi: fo.write(fi.read())
+                  except: pass
+
+          if TOKEN and CHAT_ID and os.path.exists(out):
+              with open(out, "rb") as f:
+                  requests.post(f"https://api.telegram.org/bot{TOKEN}/sendDocument", data={"chat_id": CHAT_ID, "caption": "TXT Ready"}, files={"document": f})
+          os.remove(out)
+          print("✅ TXT Generated and Sent!")
+          PYEOF
+
+      # ==========================================
+      # ZIP GENERATOR
+      # ==========================================
+      - name: 7. 🗜️ Generate ZIP
+        if: github.event.inputs.task == 'ZIP' || github.event.inputs.task == 'ALL'
+        shell: bash
+        run: |
+          python << 'PYEOF'
+          import os, zipfile, requests
+          TOKEN = os.getenv("TELEGRAM_API_REPORT_TOKEN")
+          CHAT_ID = os.getenv("TELEGRAM_API_REPORT_CHAT_ID")
+          PRIV = os.getenv("RUNNER_TEMP") + "/private_repo"
+
+          def walk(base):
+              EXCLUDE = {".git", "__pycache__", "venv", "node_modules", ".github"}
+              for root, dirs, files in os.walk(base):
+                  dirs[:] = [d for d in dirs if d not in EXCLUDE]
+                  for f in files: yield os.path.join(root, f)
+
+          out = "Output.zip"
+          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+              for p in walk("."):
+                  if p != out and not p.startswith(".") and not p.startswith("Output.zip"):
+                      z.write(p, os.path.relpath(p, "."))
+              for p in walk(PRIV):
+                  z.write(p, os.path.join("Private_Repo", os.path.relpath(p, PRIV)))
+
+          if TOKEN and CHAT_ID and os.path.exists(out):
+              with open(out, "rb") as f:
+                  requests.post(f"https://api.telegram.org/bot{TOKEN}/sendDocument", data={"chat_id": CHAT_ID, "caption": "ZIP Ready"}, files={"document": f})
+          os.remove(out)
+          print("✅ ZIP Generated and Sent!")
+          PYEOF
+
+      # ==========================================
+      # URL TESTING (FIXED — continue-on-error added)
+      # ==========================================
+      - name: 8. 🌐 Run URL Testing
+        if: github.event.inputs.task == 'URL Testing' || github.event.inputs.task == 'ALL'
+        continue-on-error: true
+        run: |
+          python ${{ runner.temp }}/private_repo/System_room/run_url_checker.py
+
+      # ==========================================
+      # API TESTING (FIXED — continue-on-error added)
+      # ==========================================
+      - name: 9. 🧪 Run API Testing
+        if: github.event.inputs.task == 'API Testing' || github.event.inputs.task == 'ALL'
+        continue-on-error: true
+        env:
+          PYTHONPATH: ${{ runner.temp }}/private_repo
+        run: |
+          cd ${{ runner.temp }}/private_repo/System_room/A_API_room && python 06_run_all_tests.py
+
+      # ==========================================
+      # VANISH
+      # ==========================================
+      - name: 10. 💨 Vanish from Air
+        if: always() && github.event.inputs.task != 'Cleaner (Purge History)'
+        run: |
+          rm -rf ${{ runner.temp }}/private_repo
+          rm -f Combined.txt Output.zip
+          echo "✅ Hawa mein hi gayab ho gaya!"
