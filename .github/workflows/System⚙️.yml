@@ -187,7 +187,7 @@ jobs:
           PYEOF
 
       # ==========================================
-      # URL TESTING (FIXED — continue-on-error added)
+      # URL TESTING (continue-on-error)
       # ==========================================
       - name: 8. 🌐 Run URL Testing
         if: github.event.inputs.task == 'URL Testing' || github.event.inputs.task == 'ALL'
@@ -196,7 +196,7 @@ jobs:
           python ${{ runner.temp }}/private_repo/System_room/run_url_checker.py
 
       # ==========================================
-      # API TESTING (FIXED — continue-on-error added)
+      # API TESTING (continue-on-error)
       # ==========================================
       - name: 9. 🧪 Run API Testing
         if: github.event.inputs.task == 'API Testing' || github.event.inputs.task == 'ALL'
