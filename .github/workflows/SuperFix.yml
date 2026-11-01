@@ -18,7 +18,7 @@ jobs:
       - name: 1. Checkout Public Repo
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.TOKEN_GITHUB }}
           fetch-depth: 0
 
       - name: 2. Setup Python
@@ -43,7 +43,7 @@ jobs:
           "
 
       # ==========================================
-      # CLONE PRIVATE
+      # CLONE PRIVATE (temp folder use karo, root mein nahi)
       # ==========================================
       - name: 5. Clone Private Backend
         run: |
@@ -52,19 +52,18 @@ jobs:
             echo "❌ TOKEN_GITHUB EMPTY!"
             exit 1
           fi
-          git clone https://$TOKEN_GITHUB@github.com/sawajstudio-system/Backend.git "$GITHUB_WORKSPACE/priv"
-          cd "$GITHUB_WORKSPACE/priv"
+          git clone https://$TOKEN_GITHUB@github.com/sawajstudio-system/Backend.git "$GITHUB_WORKSPACE/temp_private"
+          cd "$GITHUB_WORKSPACE/temp_private"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           echo "✅ Clone OK"
-          ls -la
 
       # ==========================================
       # MOVE FILES
       # ==========================================
       - name: 6. Move Files into System_room
         run: |
-          cd "$GITHUB_WORKSPACE/priv"
+          cd "$GITHUB_WORKSPACE/temp_private"
 
           if [ -f "create.py" ] && [ ! -f "System_room/create.py" ]; then
             git mv create.py System_room/create.py
@@ -87,16 +86,12 @@ jobs:
             echo "⏭️ service_api skipped"
           fi
 
-          echo ""
-          echo "Files after move:"
-          ls -la
-
       # ==========================================
       # REWRITE PY FILES IN PRIVATE
       # ==========================================
       - name: 7. Rewrite Private PY Files
         run: |
-          cd "$GITHUB_WORKSPACE/priv"
+          cd "$GITHUB_WORKSPACE/temp_private"
           python "$GITHUB_WORKSPACE/superfix.py"
 
       # ==========================================
@@ -105,7 +100,7 @@ jobs:
       - name: 8. Commit & Push Private
         run: |
           set -e
-          cd "$GITHUB_WORKSPACE/priv"
+          cd "$GITHUB_WORKSPACE/temp_private"
           git add -A
           if git diff --staged --quiet; then
             echo "⚠️ No changes in private repo"
@@ -116,7 +111,7 @@ jobs:
           fi
 
       # ==========================================
-      # UPDATE PUBLIC System.yml
+      # UPDATE PUBLIC System.yml (using TOKEN_GITHUB for workflow permission)
       # ==========================================
       - name: 9. Update Public System.yml
         run: |
@@ -124,7 +119,7 @@ jobs:
           python "$GITHUB_WORKSPACE/superfix_public.py"
 
       # ==========================================
-      # COMMIT & PUSH PUBLIC
+      # COMMIT & PUSH PUBLIC (sirf 2 specific files)
       # ==========================================
       - name: 10. Commit & Push Public
         run: |
@@ -132,7 +127,10 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
+          
+          # Only add the workflow file (skip temp_private, priv etc)
+          git add .github/workflows/System*.yml
+          
           if git diff --staged --quiet; then
             echo "⚠️ No changes in public repo"
           else
@@ -147,7 +145,7 @@ jobs:
       - name: 11. Cleanup
         if: always()
         run: |
-          rm -rf "$GITHUB_WORKSPACE/priv" || true
+          rm -rf "$GITHUB_WORKSPACE/temp_private" || true
 
       - name: 12. Final Notification
         if: always()
@@ -159,7 +157,7 @@ jobs:
           if tok and chat:
               try:
                   requests.post(f'https://api.telegram.org/bot{tok}/sendMessage',
-                      json={'chat_id': chat, 'text': f'🎉 SuperFix done!\nStatus: {status}\n\nAb system⚙️ → ALL chalao.'}, timeout=10)
+                      json={'chat_id': chat, 'text': f'🎉 SuperFix done!\nStatus: {status}'}, timeout=10)
               except Exception as e:
                   print(f'Telegram skipped: {e}')
           "
