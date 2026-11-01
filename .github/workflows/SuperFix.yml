@@ -15,21 +15,21 @@ jobs:
       TOKEN_GITHUB: ${{ secrets.TOKEN_GITHUB }}
 
     steps:
-      - name: 1. Checkout Public Repo
+      - name: "1. Checkout Public Repo"
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.TOKEN_GITHUB }}
           fetch-depth: 0
 
-      - name: 2. Setup Python
+      - name: "2. Setup Python"
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: 3. Install deps
+      - name: "3. Install deps"
         run: pip install requests
 
-      - name: 4. Start Notification
+      - name: "4. Start Notification"
         run: |
           python -c "
           import os, requests
@@ -42,26 +42,27 @@ jobs:
                   print(f'Telegram skipped: {e}')
           "
 
-      # ==========================================
-      # CLONE PRIVATE (temp folder use karo, root mein nahi)
-      # ==========================================
-      - name: 5. Clone Private Backend
+      - name: "5. Clone Private Backend"
         run: |
           set -e
+          echo "→ Cloning private repo..."
           if [ -z "$TOKEN_GITHUB" ]; then
             echo "❌ TOKEN_GITHUB EMPTY!"
             exit 1
           fi
           git clone https://$TOKEN_GITHUB@github.com/sawajstudio-system/Backend.git "$GITHUB_WORKSPACE/temp_private"
+          echo "✅ Clone OK"
+          ls -la "$GITHUB_WORKSPACE/temp_private" | head -10
+
+      - name: "6. Config Private Git"
+        run: |
           cd "$GITHUB_WORKSPACE/temp_private"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          echo "✅ Clone OK"
+          echo "Branch: $(git branch --show-current)"
+          echo "Last: $(git log -1 --oneline)"
 
-      # ==========================================
-      # MOVE FILES
-      # ==========================================
-      - name: 6. Move Files into System_room
+      - name: "7. Move Files into System_room"
         run: |
           cd "$GITHUB_WORKSPACE/temp_private"
 
@@ -86,18 +87,16 @@ jobs:
             echo "⏭️ service_api skipped"
           fi
 
-      # ==========================================
-      # REWRITE PY FILES IN PRIVATE
-      # ==========================================
-      - name: 7. Rewrite Private PY Files
+          echo ""
+          echo "System_room contents:"
+          ls -la System_room/
+
+      - name: "8. Rewrite PY Files"
         run: |
           cd "$GITHUB_WORKSPACE/temp_private"
           python "$GITHUB_WORKSPACE/superfix.py"
 
-      # ==========================================
-      # COMMIT & PUSH PRIVATE
-      # ==========================================
-      - name: 8. Commit & Push Private
+      - name: "9. Commit & Push Private"
         run: |
           set -e
           cd "$GITHUB_WORKSPACE/temp_private"
@@ -110,27 +109,18 @@ jobs:
             echo "✅ Private repo pushed"
           fi
 
-      # ==========================================
-      # UPDATE PUBLIC System.yml (using TOKEN_GITHUB for workflow permission)
-      # ==========================================
-      - name: 9. Update Public System.yml
+      - name: "10. Update Public System.yml"
         run: |
           cd "$GITHUB_WORKSPACE"
           python "$GITHUB_WORKSPACE/superfix_public.py"
 
-      # ==========================================
-      # COMMIT & PUSH PUBLIC (sirf 2 specific files)
-      # ==========================================
-      - name: 10. Commit & Push Public
+      - name: "11. Commit & Push Public"
         run: |
           set -e
           cd "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Only add the workflow file (skip temp_private, priv etc)
           git add .github/workflows/System*.yml
-          
           if git diff --staged --quiet; then
             echo "⚠️ No changes in public repo"
           else
@@ -139,15 +129,13 @@ jobs:
             echo "✅ Public repo pushed"
           fi
 
-      # ==========================================
-      # CLEANUP + NOTIFY
-      # ==========================================
-      - name: 11. Cleanup
+      - name: "12. Cleanup"
         if: always()
         run: |
           rm -rf "$GITHUB_WORKSPACE/temp_private" || true
+          echo "✅ Cleanup done"
 
-      - name: 12. Final Notification
+      - name: "13. Final Notification"
         if: always()
         run: |
           python -c "
